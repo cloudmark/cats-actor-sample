@@ -1,8 +1,8 @@
 package com.suprnation
 
-import actor.Actor.Receive
-import actor.props.Props
-import actor.{Actor, ActorRef, ActorSystem}
+import actor.Actor.{Actor, Receive}
+import actor.ActorRef.ActorRef
+import actor.ActorSystem
 
 import cats.effect.implicits._
 import cats.effect.{ExitCode, IO, IOApp, Resource}
@@ -12,12 +12,18 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 
-case class Tourist(name: String, bananaCount: Int)
+trait JungleRequest
 
-case class TakeBanana(tourist: Tourist)
+case class Tourist(name: String, bananaCount: Int) extends JungleRequest
 
-class BananaSnatcher extends Actor[IO] {
-  override def receive: Receive[IO] = {
+case class TakeBanana(tourist: Tourist) extends JungleRequest
+
+case object MonkeySleeping extends JungleRequest
+
+
+
+class BananaSnatcher extends Actor[IO, JungleRequest] {
+  override def receive: Receive[IO, JungleRequest] = {
     case TakeBanana(tourist) =>
       if (tourist.bananaCount > 0) {
         IO.println(s"🍌  ${context.self.path.name} stole a banana from ${tourist.name}!")
@@ -29,11 +35,11 @@ class BananaSnatcher extends Actor[IO] {
 }
 
 
-class BananaGuardian(bananaSnatchers: List[ActorRef[IO]]) extends Actor[IO] {
+class BananaGuardian(bananaSnatchers: List[ActorRef[IO, JungleRequest]]) extends Actor[IO, JungleRequest] {
   override def preStart: IO[Unit] =
-    context.setReceiveTimeout(5.seconds)
+    context.setReceiveTimeout(5.seconds, MonkeySleeping)
 
-  override def receive: Receive[IO] = {
+  override def receive: Receive[IO, JungleRequest] = {
     case tourist: Tourist =>
       IO.println(s"🐒  ${context.self.path.name} sees ${tourist.name} with ${tourist.bananaCount} bananas.") >>
         (if (tourist.bananaCount > 0) {
@@ -43,20 +49,23 @@ class BananaGuardian(bananaSnatchers: List[ActorRef[IO]]) extends Actor[IO] {
         } else {
           IO.println(s"😪 ${context.self.path.name} is bored. No bananas for the monkeys!")
         })
-    case com.suprnation.actor.ReceiveTimeout =>
+    case MonkeySleeping =>
       IO.println(s"😴  ${context.self.path.name} is dozing off. Nothing is happening!")
     case _ => IO.unit
   }
 }
 
 
-case class TouristArrival(name: String, bananaCount: Int)
+trait TouristRequest
 
-case class TouristLeaving(name: String)
+case class TouristArrival(name: String, bananaCount: Int) extends TouristRequest
 
-class TouristActor(bananaGuardian: ActorRef[IO]) extends Actor[IO] {
+case class TouristLeaving(name: String) extends TouristRequest
 
-  override def receive: Receive[IO] = {
+
+class TouristActor(bananaGuardian: ActorRef[IO, JungleRequest]) extends Actor[IO, TouristRequest] {
+
+  override def receive: Receive[IO, TouristRequest] = {
     case TouristArrival(name, count) =>
       bananaGuardian ! Tourist(name, count)
     case TouristLeaving(name) =>
@@ -73,16 +82,16 @@ object JungleChaos extends IOApp {
     actorSystemResource.use { system =>
       for {
         bananaSnatchers <- (1 to 3).toList.map(i =>
-          system.actorOf(Props(new BananaSnatcher()), s"banana-snatcher-$i")
+          system.actorOf(new BananaSnatcher(), s"banana-snatcher-$i")
         ).sequence
 
-        bananaGuardian <- system.actorOf(Props(
-          new BananaGuardian(bananaSnatchers)), "banana-guardian"
+        bananaGuardian <- system.actorOf(
+          new BananaGuardian(bananaSnatchers), "banana-guardian"
         )
 
-        touristActor1 <- system.actorOf(Props(new TouristActor(bananaGuardian)), "tourist-1")
-        touristActor2 <- system.actorOf(Props(new TouristActor(bananaGuardian)), "tourist-2")
-        touristActor3 <- system.actorOf(Props(new TouristActor(bananaGuardian)), "tourist-3")
+        touristActor1 <- system.actorOf(new TouristActor(bananaGuardian), "tourist-1")
+        touristActor2 <- system.actorOf(new TouristActor(bananaGuardian), "tourist-2")
+        touristActor3 <- system.actorOf(new TouristActor(bananaGuardian), "tourist-3")
 
         _ <- touristActor1 ! TouristArrival("Tourist-1", 3)
         _ <- IO.sleep(3 seconds)

@@ -21,3 +21,8 @@ This sample highlights the supervision strategy in `cats-actors`. The `CatJuggle
 This sample demonstrates how to use `cats-actors` to simulate a digital logic circuit. The actors represent various logic gates (e.g., AND, OR, NOT) and wires that carry boolean signals. The sample constructs a demultiplexer (demux) circuit, showing how the actors can be wired together to simulate complex logic circuits. This example also illustrates the power of combining actors with functional programming to create dynamic and reactive systems.
 
 These samples provide a comprehensive overview of the capabilities of `cats-actors`, showcasing how actors can be used to model complex interactions, manage state transitions, handle failures, and simulate real-world scenarios.
+
+
+## Sample 5: Alice Sends Money to Bob
+Sample 5 demonstrates how cats-actors facilitate concurrent wallet management for financial transactions. It showcases actors representing Alice and Bob's wallets, handling deposit and withdrawal operations atomically. This sample underscores cats-actors' capability in ensuring transactional integrity and concurrent state management.
+

@@ -1,22 +1,24 @@
 package com.suprnation
 
-import actor.Actor.Receive
+import actor.Actor.{Actor, Receive}
+import actor.ActorRef.NoSendActorRef
 import actor.SupervisorStrategy.{Decider, Restart}
 import actor._
-import actor.props.{Props, PropsF}
 
 import cats.effect._
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-object Juggle
+trait CatCircusRequest
 
-case class BallOfYarn(id: Int) {
+object Juggle extends CatCircusRequest
+
+case class BallOfYarn(id: Int) extends CatCircusRequest {
   override def toString: String = s"Yarn Ball $id"
 }
 
-class CatJuggler(balls: Ref[IO, List[BallOfYarn]]) extends Actor[IO] {
+class CatJuggler(balls: Ref[IO, List[BallOfYarn]]) extends Actor[IO, CatCircusRequest] {
 
   override val preStart: IO[Unit] =
     IO.println("Meow and welcome to the show!") >>
@@ -25,7 +27,7 @@ class CatJuggler(balls: Ref[IO, List[BallOfYarn]]) extends Actor[IO] {
   override def postRestart(reason: Option[Throwable]): IO[Unit] =
     IO.println(s"Restarted Juggler! Reason: ${reason.map(_.toString).getOrElse("N/A")}")
 
-  override val receive: Receive[IO] = {
+  override val receive: Receive[IO, CatCircusRequest] = {
     case Juggle =>
       for {
         currentBalls <- balls.get
@@ -45,14 +47,14 @@ class CatJuggler(balls: Ref[IO, List[BallOfYarn]]) extends Actor[IO] {
 }
 
 object Ringmaster {
-  def apply(): IO[Actor[IO]] = {
+  def apply(): IO[Actor[IO, CatCircusRequest]] = {
     Ref[IO].of(0).map(counter => {
-      new Actor[IO] {
+      new Actor[IO, CatCircusRequest] {
         override val preStart: IO[Unit] = for {
           balls <- counter.set(3) >> Ref[IO].of(List(BallOfYarn(1), BallOfYarn(2), BallOfYarn(3)))
-          juggler <- context.actorOf(Props(new CatJuggler(balls)), "juggler")
+          juggler <- context.actorOf(new CatJuggler(balls), "juggler")
           // Every second the Ring master will tell every juggler to juggle the balls.
-          _ <- (juggler ! Juggle).delayBy(1 second).foreverM
+          _ <- (juggler ! Juggle).delayBy(1 second).foreverM.start
         } yield ()
 
 
@@ -61,12 +63,13 @@ object Ringmaster {
             case _ => Restart
           }
 
-          override def handleChildTerminated(context: ActorContext[IO], child: ActorRef[IO], children: Iterable[ActorRef[IO]]): IO[Unit] = IO.unit
+          override def handleChildTerminated(context: MinimalActorContext[IO, Nothing, Any], child: NoSendActorRef[IO], children: Iterable[NoSendActorRef[IO]]): IO[Unit] = IO.unit
 
-          override def processFailure(context: ActorContext[IO], restart: Boolean, child: ActorRef[IO], cause: Option[Throwable], stats: ChildRestartStats[IO], children: List[ChildRestartStats[IO]]): IO[Unit] =
+
+          override def processFailure(context: MinimalActorContext[IO, Nothing, Any], restart: Boolean, child: NoSendActorRef[IO], cause: Option[Throwable], stats: ChildRestartStats[IO], children: List[ChildRestartStats[IO]]): IO[Unit] =
             if (restart) {
               counter.flatModify(current =>
-                current + 1 -> (child ! BallOfYarn(current + 1))
+                current + 1 -> (child.widenRequest[CatCircusRequest] ! BallOfYarn(current + 1))
               ) >> restartChild(child, cause, suspendFirst = false)
             } else
               context.stop(child)
@@ -79,7 +82,7 @@ object Ringmaster {
 object CatCircus extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     ActorSystem[IO]("CatCircus").use { system =>
-      system.actorOf(PropsF[IO](Ringmaster()), "ringmaster") >>
+      system.actorOf(Ringmaster(), "ringmaster") >>
         system.waitForTermination.as(ExitCode.Success)
     }
   }

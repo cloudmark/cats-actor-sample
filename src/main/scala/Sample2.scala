@@ -1,10 +1,10 @@
 package com.suprnation
 
-import actor.Actor.Receive
+import actor.Actor.{Actor, Receive}
+import actor.ActorRef.ActorRef
+import actor.ActorSystem
 import actor.fsm.FSM.Event
 import actor.fsm.{FSM, FSMConfig}
-import actor.props.{Props, PropsF}
-import actor.{Actor, ActorRef, ActorSystem}
 
 import cats.effect.{ExitCode, IO, IOApp}
 
@@ -21,9 +21,10 @@ case object Sleepy extends CatState
 
 case object Hungry extends CatState
 
-case class Greet(from: ActorRef[IO])
 
 sealed trait Action
+
+case class Greet(from: ActorRef[IO, Any]) extends Action
 
 case object Play extends Action
 
@@ -34,8 +35,8 @@ case object Eat extends Action
 object Cat {
   type CatName = String
 
-  def apply(name: String): IO[Actor[IO]] = {
-    FSM[IO, CatState, CatName]
+  def apply(name: String): IO[Actor[IO, Action]] = {
+    FSM[IO, CatState, CatName, Action, Any]
       .when(Happy) {
         case (Event(Greet(from), name), sM) =>
           (from ! s"$name purrs and rubs against your leg.") >> sM.stay()
@@ -75,7 +76,7 @@ object Cat {
 
 
 object CatCafeFSM extends IOApp {
-  def randomCatAction(cat: ActorRef[IO]): IO[Unit] = {
+  def randomCatAction(cat: ActorRef[IO, Action]): IO[Unit] = {
     val actions: List[Action] = List(Play, Nap, Eat)
     val randomAction: Action = actions(Random.nextInt(actions.length))
     cat ! randomAction
@@ -84,14 +85,14 @@ object CatCafeFSM extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     ActorSystem[IO]("CatCafe").use { system =>
       for {
-        whiskers <- system.actorOf(PropsF(Cat("Whiskers 🐱")), "Whiskers")
-        shadow <- system.actorOf(PropsF(Cat("Shadow 🐈‍⬛")), "Shadow")
-        chester <- system.actorOf(PropsF(Cat("Chester 🐈")), "Chester")
-        patron <- system.actorOf(Props(new Actor[IO] {
-          override def receive: Receive[IO] = {
+        whiskers <- system.actorOf(Cat("Whiskers 🐱"), "Whiskers")
+        shadow <- system.actorOf(Cat("Shadow 🐈‍⬛"), "Shadow")
+        chester <- system.actorOf(Cat("Chester 🐈"), "Chester")
+        patron <- system.actorOf(new Actor[IO, Any] {
+          override def receive: Receive[IO, Any] = {
             case msg: String => IO.println(s"Patron: $msg")
           }
-        }))
+        })
         _ <- whiskers ! Greet(patron)
         _ <- shadow ! Greet(patron)
         _ <- chester ! Greet(patron)

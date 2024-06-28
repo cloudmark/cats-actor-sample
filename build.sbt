@@ -10,4 +10,4 @@ lazy val root = (project in file("."))
 
 resolvers += "jitpack" at "https://jitpack.io"
 
-libraryDependencies += "com.github.suprnation" % "cats-actors" % "1.0.2"
+libraryDependencies += "com.github.suprnation" % "cats-actors" % "2.0.0-RC1"
