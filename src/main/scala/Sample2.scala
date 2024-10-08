@@ -1,8 +1,10 @@
 package com.suprnation
 
+import cats.implicits._
+import cats.instances._
 import actor.Actor.{Actor, Receive}
 import actor.ActorRef.ActorRef
-import actor.ActorSystem
+import actor.{ActorSystem, ReplyingActor}
 import actor.fsm.FSM.Event
 import actor.fsm.{FSM, FSMConfig}
 
@@ -35,37 +37,40 @@ case object Eat extends Action
 object Cat {
   type CatName = String
 
-  def apply(name: String): IO[Actor[IO, Action]] = {
-    FSM[IO, CatState, CatName, Action, Any]
-      .when(Happy) {
-        case (Event(Greet(from), name), sM) =>
-          (from ! s"$name purrs and rubs against your leg.") >> sM.stay()
-        case (Event(Play, _), sM) =>
-          IO.println(s"$name is already happy!") >> sM.stay()
-        case (Event(Nap, _), sM) =>
-          IO.println(s"$name curls up in a sunbeam for a nap.") >> sM.goto(Sleepy)
-        case (Event(Eat, _), sM) =>
-          IO.println(s"$name is not hungry yet.") >> sM.stay()
+  def apply(name: String): IO[ReplyingActor[IO, Action, List[Any]]] = {
+    FSM[IO, CatState, CatName, Action, List[Any]]
+      .when(Happy) { sM => {
+          case Event(Greet(from), name) =>
+            (from ! s"$name purrs and rubs against your leg.") >> sM.stay()
+          case Event(Play, _) =>
+            IO.println(s"$name is already happy!") >> sM.stay()
+          case Event(Nap, _) =>
+            IO.println(s"$name curls up in a sunbeam for a nap.") >> sM.goto(Sleepy)
+          case Event(Eat, _) =>
+            IO.println(s"$name is not hungry yet.") >> sM.stay()
+        }
       }
-      .when(Sleepy) {
-        case (Event(Greet(from), name), sM) =>
-          (from ! s"$name yawns and ignores you.") >> sM.stay()
-        case (Event(Play, _), sM) =>
-          IO.println(s"$name is too sleepy to play.") >> sM.stay()
-        case (Event(Nap, _), sM) =>
-          IO.println(s"$name is already sleeping.") >> sM.stay()
-        case (Event(Eat, _), sM) =>
-          IO.println(s"$name wakes up and eats some food.") >> sM.goto(Hungry)
+      .when(Sleepy) { sM => {
+          case Event(Greet(from), name) =>
+            (from ! s"$name yawns and ignores you.") >> sM.stay()
+          case Event(Play, _) =>
+            IO.println(s"$name is too sleepy to play.") >> sM.stay()
+          case Event(Nap, _) =>
+            IO.println(s"$name is already sleeping.") >> sM.stay()
+          case Event(Eat, _) =>
+            IO.println(s"$name wakes up and eats some food.") >> sM.goto(Hungry)
+        }
       }
-      .when(Hungry) {
-        case (Event(Greet(from), name), sM) =>
-          (from ! s"$name looks at you expectantly.") >> sM.stay()
-        case (Event(Play, _), sM) =>
-          IO.println(s"$name is too hungry to play.") >> sM.stay()
-        case (Event(Nap, _), sM) =>
-          IO.println(s"$name is too hungry to nap.") >> sM.stay()
-        case (Event(Eat, _), sM) =>
-          IO.println(s"$name devours a bowl of tuna.") >> sM.goto(Happy)
+      .when(Hungry) { sM => {
+          case Event(Greet(from), name) =>
+            (from ! s"$name looks at you expectantly.") >> sM.stay()
+          case Event(Play, _) =>
+            IO.println(s"$name is too hungry to play.") >> sM.stay()
+          case Event(Nap, _) =>
+            IO.println(s"$name is too hungry to nap.") >> sM.stay()
+          case Event(Eat, _) =>
+            IO.println(s"$name devours a bowl of tuna.") >> sM.goto(Happy)
+        }
       }
       // .withConfig(FSMConfig.withConsoleInformation)
       .withConfig(FSMConfig.noDebug)
@@ -85,9 +90,9 @@ object CatCafeFSM extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     ActorSystem[IO]("CatCafe").use { system =>
       for {
-        whiskers <- system.actorOf(Cat("Whiskers 🐱"), "Whiskers")
-        shadow <- system.actorOf(Cat("Shadow 🐈‍⬛"), "Shadow")
-        chester <- system.actorOf(Cat("Chester 🐈"), "Chester")
+        whiskers <- system.replyingActorOf(Cat("Whiskers 🐱"), "Whiskers")
+        shadow <- system.replyingActorOf(Cat("Shadow 🐈‍⬛"), "Shadow")
+        chester <- system.replyingActorOf(Cat("Chester 🐈"), "Chester")
         patron <- system.actorOf(new Actor[IO, Any] {
           override def receive: Receive[IO, Any] = {
             case msg: String => IO.println(s"Patron: $msg")

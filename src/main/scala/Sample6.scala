@@ -17,10 +17,9 @@ import scala.language.postfixOps
 
 
 object StreamExtensions {
+
   sealed trait Message
-
   case object Ack extends Message
-
   case object Fail extends Message
 
   implicit class BoundedStreamOps[F[+_] : Console: Concurrent : Temporal](refProvider: ActorRefProvider[F]) {

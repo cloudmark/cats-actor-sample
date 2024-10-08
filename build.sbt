@@ -13,7 +13,7 @@ lazy val root = (project in file("."))
       "co.fs2" %% "fs2-core" % "3.10.2",
       "org.typelevel" %% "cats-effect" % "3.1.1",
       "org.typelevel" %% "cats-core" % "2.12.0",
-      "com.github.suprnation.cats-actors" %% "cats-actors" % "2.0.0-RC2"
+      "com.github.suprnation.cats-actors" %% "cats-actors" % "2.0.0-RC5"
     ),
     resolvers += "jitpack" at "https://jitpack.io"
   )

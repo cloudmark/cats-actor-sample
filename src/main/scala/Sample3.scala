@@ -63,10 +63,9 @@ object Ringmaster {
             case _ => Restart
           }
 
-          override def handleChildTerminated(context: MinimalActorContext[IO, Nothing, Any], child: NoSendActorRef[IO], children: Iterable[NoSendActorRef[IO]]): IO[Unit] = IO.unit
+          override def handleChildTerminated(context: ActorContext[IO, _, _], child: NoSendActorRef[IO], children: Iterable[NoSendActorRef[IO]]): IO[Unit] = IO.unit
 
-
-          override def processFailure(context: MinimalActorContext[IO, Nothing, Any], restart: Boolean, child: NoSendActorRef[IO], cause: Option[Throwable], stats: ChildRestartStats[IO], children: List[ChildRestartStats[IO]]): IO[Unit] =
+          override def processFailure(context: ActorContext[IO, _, _], restart: Boolean, child: NoSendActorRef[IO], cause: Option[Throwable], stats: ChildRestartStats[IO], children: List[ChildRestartStats[IO]]): IO[Unit] =
             if (restart) {
               counter.flatModify(current =>
                 current + 1 -> (child.widenRequest[CatCircusRequest] ! BallOfYarn(current + 1))
